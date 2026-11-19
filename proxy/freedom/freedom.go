@@ -276,6 +276,17 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 	return a != net.AnyIP && a != net.AnyIPv6
 }
 
+func proxyProtocolSourceAddr(source net.Destination, destination net.Addr) net.Addr {
+	switch destination.(type) {
+	case *net.TCPAddr:
+		return net.TCPDestination(source.Address, source.Port).RawNetAddr()
+	case *net.UDPAddr:
+		return net.UDPDestination(source.Address, source.Port).RawNetAddr()
+	default:
+		return source.RawNetAddr()
+	}
+}
+
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
@@ -388,8 +399,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
-		srcAddr := inbound.Source.RawNetAddr()
 		dstAddr := conn.RemoteAddr()
+		srcAddr := proxyProtocolSourceAddr(inbound.Source, dstAddr)
 		header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
 		if _, err = header.WriteTo(conn); err != nil {
 			conn.Close()
